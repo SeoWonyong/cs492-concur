@@ -8,8 +8,7 @@ use std::sync::{Arc, Mutex, RwLock};
 #[derive(Debug, Default)]
 pub struct Cache<K, V> {
     // todo! Build your own cache type.
-    inner: RwLock<HashMap<K, V>>,
-    add_list: Mutex<Vec<K>>,
+    inner: RwLock<HashMap<K, Arc<Mutex<Option<V>>>>>,
 }
 
 impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
@@ -26,13 +25,26 @@ impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
     pub fn get_or_insert_with<F: FnOnce(K) -> V>(&self, key: K, f: F) -> V {
         let read_map = self.inner.read().unwrap();
         match read_map.get(&key) {
-            Some(v) => v.clone(),
+            Some(v) => Arc::clone(&v).lock().unwrap().clone().take().unwrap(),
             None => {
                 drop(read_map);
-                let mut add_list = self.add_list.lock();
-                f(key)
-
-            
+                let mut write_map = self.inner.write().unwrap();
+                let temp = write_map.entry(key.clone()).or_insert(Arc::new(Mutex::new(None))).clone();
+                let mut temp_ = temp.lock().unwrap();
+                match &*temp_ {
+                    None => {
+                        drop(temp_);
+                        drop(temp);
+                        drop(write_map);
+                        let v = f(key);
+                        *temp_ = Some(v.clone());
+                        v
+                    },
+                    Some(v) => {
+                        v.clone()
+                    }
+                }
+                
             }
         }
     }

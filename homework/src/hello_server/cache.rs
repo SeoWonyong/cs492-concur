@@ -29,19 +29,18 @@ impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
             None => {
                 drop(read_map);
                 let mut write_map = self.inner.write().unwrap();
-                let temp = write_map.entry(key.clone()).or_insert(Arc::new(Mutex::new(None))).clone();
-                let mut temp_ = temp.lock().unwrap();
-                match &*temp_ {
+                let temp = write_map.insert(key.clone(),Arc::new(Mutex::new(None)));
+                drop(write_map);
+                let read_map = self.inner.read().unwrap();
+                let mut temp_ = read_map.get(&key).unwrap().lock().unwrap();
+                match temp {
                     None => {
-                        drop(temp_);
-                        drop(temp);
-                        drop(write_map);
-                        let v = f(key);
+                        let v = f(key.clone());
                         *temp_ = Some(v.clone());
                         v
                     },
                     Some(v) => {
-                        v.clone()
+                        v.clone().lock().unwrap().clone().take().unwrap()
                     }
                 }
                 

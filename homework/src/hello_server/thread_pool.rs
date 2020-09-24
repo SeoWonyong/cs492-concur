@@ -65,7 +65,18 @@ impl ThreadPool {
     pub fn new(size: usize) -> Self {
         assert!(size > 0);
 
-        todo!()
+        let mut workers = Vec::with_capacity(size);
+
+        for id in 0..size {
+            workers.push(Worker{id: id, thread: Some(thread::spawn(|| {}))});
+        }
+        let (job_sender, job_reciever) = unbounded();
+        let pool_inner = Arc::new(ThreadPoolInner{job_count: Mutex::new(size), empty_condvar: Condvar::new()});
+        ThreadPool {
+            workers,
+            job_sender: Some(job_sender),
+            pool_inner
+        }
     }
 
     /// Execute a new job in the thread pool.

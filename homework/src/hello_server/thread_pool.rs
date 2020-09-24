@@ -4,7 +4,7 @@
 
 // NOTE: Crossbeam channels are MPMC, which means that you don't need to wrap the receiver in
 // Arc<Mutex<..>>. Just clone the receiver and give it to each worker thread.
-use crossbeam_channel::{unbounded, Sender};
+use crossbeam_channel::{unbounded, Sender, Receiver};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
@@ -20,7 +20,7 @@ impl Drop for Worker {
     /// When dropped, the thread's `JoinHandle` must be `join`ed.  If the worker panics, then this
     /// function should panic too.  NOTE: that the thread is detached if not `join`ed explicitly.
     fn drop(&mut self) {
-        todo!()
+        self.thread.take().unwrap().join().unwrap();
     }
 }
 
@@ -35,12 +35,16 @@ struct ThreadPoolInner {
 impl ThreadPoolInner {
     /// Increment the job count.
     fn start_job(&self) {
-        todo!()
+        let mut count = self.job_count.lock().unwrap();
+        *count += 1;
     }
 
     /// Decrement the job count.
     fn finish_job(&self) {
-        todo!()
+        let mut count = self.job_count.lock().unwrap();
+        *count -= 1;
+        self.empty_condvar.notify_all();
+        
     }
 
     /// Wait until the job count becomes 0.
@@ -48,7 +52,10 @@ impl ThreadPoolInner {
     /// NOTE: We can optimize this function by adding another field to `ThreadPoolInner`, but let's
     /// not care about that in this homework.
     fn wait_empty(&self) {
-        todo!()
+        let mut count = self.job_count.lock().unwrap();
+        while *count != 0 {
+            count = self.empty_condvar.wait(count).unwrap();
+        }
     }
 }
 
@@ -67,15 +74,38 @@ impl ThreadPool {
 
         let mut workers = Vec::with_capacity(size);
 
+        let (job_sender, job_reciever): (Sender<Job>, Receiver<Job>) = unbounded();
+        let job_reciever = Arc::new(job_reciever);
+
+        let pool_inner = Arc::new(ThreadPoolInner {
+            job_count: Mutex::new(0),
+            empty_condvar: Condvar::new(),
+        });
+
         for id in 0..size {
-            workers.push(Worker{id: id, thread: Some(thread::spawn(|| {}))});
+            let job_reciever = Arc::clone(&job_reciever);
+            let pool_inner = pool_inner.clone();
+            workers.push(Worker {
+                id,
+                thread: Some(thread::spawn(move || loop {
+                    let job = job_reciever.recv();
+                    match job {
+                        Ok(job) => {
+                            let job = job.0;
+                            pool_inner.start_job();
+                            job();
+                            pool_inner.finish_job();
+                        },
+                        Err(_) => break,
+                    }
+                })),
+            });
         }
-        let (job_sender, job_reciever) = unbounded();
-        let pool_inner = Arc::new(ThreadPoolInner{job_count: Mutex::new(size), empty_condvar: Condvar::new()});
+
         ThreadPool {
             workers,
             job_sender: Some(job_sender),
-            pool_inner
+            pool_inner,
         }
     }
 
@@ -84,13 +114,16 @@ impl ThreadPool {
     where
         F: FnOnce() + Send + 'static,
     {
-        todo!()
+        let job = Job(Box::new(f));
+        if let Some(sender) = &self.job_sender {
+            sender.send(job).unwrap();
+        }
     }
 
     /// Block the current thread until all jobs in the pool have been executed.  NOTE: This method
     /// has nothing to do with `JoinHandle::join`.
     pub fn join(&self) {
-        todo!()
+        self.pool_inner.wait_empty();
     }
 }
 
@@ -98,7 +131,7 @@ impl Drop for ThreadPool {
     /// When dropped, all worker threads' `JoinHandle` must be `join`ed. If the thread panicked,
     /// then this function should panic too.
     fn drop(&mut self) {
-        todo!()
+        drop(self.job_sender.take().unwrap());
     }
 }
 

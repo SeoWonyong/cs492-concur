@@ -8,7 +8,8 @@ use std::sync::{Arc, Mutex, RwLock};
 #[derive(Debug, Default)]
 pub struct Cache<K, V> {
     // todo! Build your own cache type.
-    inner: ()
+    inner: Arc<RwLock<HashMap<K, V>>>,
+    add_list: Vec<K>,
 }
 
 impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
@@ -23,7 +24,7 @@ impl<K: Eq + Hash + Clone, V: Clone> Cache<K, V> {
     /// duplicate the work. That is, `f` should be run only once for each key. Specifically, even
     /// for the concurrent invocations of `get_or_insert_with(key, f)`, `f` is called only once.
     pub fn get_or_insert_with<F: FnOnce(K) -> V>(&self, key: K, f: F) -> V {
-        todo!()
+        f(key)
     }
 }
 

@@ -123,6 +123,13 @@ impl ThreadPool {
     /// Block the current thread until all jobs in the pool have been executed.  NOTE: This method
     /// has nothing to do with `JoinHandle::join`.
     pub fn join(&self) {
+        if let  Some(sender) = &self.job_sender {
+            loop {
+                if sender.len() == 0 {
+                    break;
+                }
+            }
+        }
         self.pool_inner.wait_empty();
     }
 }

@@ -319,7 +319,6 @@ fn test_prepend() {
 #[test]
 fn test_insert_next() {
     let mut list = list_from(&[1, 4]);
-
     let mut it = list.iter_mut();
     it.insert_next(0);
     assert_eq!(it.next().unwrap(), &1);
@@ -328,6 +327,5 @@ fn test_insert_next() {
     assert_eq!(it.next().unwrap(), &4);
     it.insert_next(5);
     assert_eq!(it.next(), None);
-
     assert_eq!(list.into_iter().collect::<Vec<_>>(), [0, 1, 2, 3, 4, 5]);
 }
